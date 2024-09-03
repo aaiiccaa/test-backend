@@ -8,14 +8,15 @@ const bodyParser = require('body-parser');
 
 const app = express();
 const port = 3000;
+const host = process.env.NODE_ENV !== 'production' ? 'localhost' : '0.0.0.0';
 
 let users = [];
 
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended:true }));
+app.use(bodyParser.urlencoded({ extended: true }));
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+app.listen(port, host, () => {
+    console.log(`Server running on http://${host}:${port}`);
 });
 
 app.get('/users', (req, res) => {
