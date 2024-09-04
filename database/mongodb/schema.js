@@ -1,15 +1,15 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-    _id: String,
     name: String,
-    email: String
+    email: String,
+    password: String
 });
 
 const orderSchema = new mongoose.Schema({
-    _id: String,
+    email: String,
     name: String,
-    date: String
+    status: String
 });
 
 module.exports = {
