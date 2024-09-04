@@ -19,7 +19,8 @@ const { initializePassport, authenticatePassportJwt } = require('./middlewares/p
 // Initialize an Express application
 const app = express();
 // Define the port number on which the server will listen
-const PORT = 3000;
+const port = 3000;
+const host = process.env.NODE_ENV !== 'production' ? 'localhost' : '0.0.0.0'
 // Initialize Passport
 app.use(initializePassport());
 
@@ -33,8 +34,8 @@ app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x
 
 
 // Start the server and listen on the defined port
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(port, host, () => {
+    console.log(`Server running on http://${host}:${port}`);
 });
 
 // Route to GET all users - returns the users array as JSON
