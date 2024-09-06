@@ -1,90 +1,43 @@
 require('dotenv').config();
 
 const mongodb = require('./database/mongodb/db');
-const userQuery = require('./database/mongodb/query'); 
+const userQuery = require('./database/mongodb/query');
+const companyQuery = require('./database/mongodb/query'); 
 
 mongodb.connectDB();
 
-// Import the express module to create and configure the HTTP server
 const express = require('express');
-// Import the body-parser middleware to parse incoming request bodies
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-// Import the verifyToken middleware to authenticate JWT tokens
-const verifyToken = require('./middlewares/jwt');
-// Import the passport middleware to authenticate and configure the passport authentication
 const { initializePassport, authenticatePassportJwt } = require('./middlewares/passport-jwt');
 
-// Initialize an Express application
 const app = express();
-// Define the port number on which the server will listen
 const port = 3000;
 const host = process.env.NODE_ENV !== 'production' ? 'localhost' : '0.0.0.0'
-// Initialize Passport
+
 app.use(initializePassport());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-
-// Initialize an array to store user data
-let users = [];
-
-// Middleware to parse JSON bodies
-app.use(bodyParser.json()); // for parsing application/json
-app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
-
-
-// Start the server and listen on the defined port
 app.listen(port, host, () => {
     console.log(`Server running on http://${host}:${port}`);
 });
 
-// Route to GET all users - returns the users array as JSON
-app.get('/users', (req, res) => {
-  userQuery.getUsers().then((users) => {
-    res.json(users);
-  });
+/**
+ * User Routes
+ */
+
+// Get all users
+app.get('/users', authenticatePassportJwt(), (req, res) => {
+    userQuery.getUsers().then((users) => {
+        res.json(users);
+    }).catch(err => {
+        res.status(500).json({ error: err.message });
+    });
 });
 
-// Route to POST a new user - adds a new user to the users array
-app.post('/users', (req, res) => {
-  const user = req.body; // Extract the user from the request body
-  console.log(req);
-  userQuery.createUser(user).then((user) => {
-    res.status(201).json(user); // Respond with the created user and status code 201
-  })
-});
-  
-
-// Route to PUT (update) a user by id
-app.put('/users/:id', (req, res) => {
-  const { id } = req.params; // Extract the id from the request parameters
-  const user = req.body; // Extract the updated user from the request body
-  userQuery.updateUser(id, user).then((user) => {
-    res.status(200).json(user); // Respond with the updated user
-  });
-});
-
-// Route to DELETE a user by id
-app.delete('/users/:id', (req, res) => {
-  const { id } = req.params; // Extract the id from the request parameters
-  userQuery.deleteUser(id).then(() => {
-    res.status(204).send(); // Respond with no content and status code 204
-  });
-});
-
-// Route to search users by name
-app.get('/users/search', (req, res) => {
-    const { name } = req.query; // Extract the name query parameter
-  
-    // Check if the name query parameter is provided
-    if (!name) {
-      return res.status(400).send({ message: "Name query parameter is required" });
-    }
-    userQuery.findByName(name).then((users) => {
-      res.status(200).json(users); // Respond with the filtered users
-    });    
-});
-
+// Create a new user (registration)
 app.post('/users/register', (req, res) => {
   const user = req.body;
   userQuery.createUser(user).then((user) => {
@@ -94,90 +47,179 @@ app.post('/users/register', (req, res) => {
     });
 });
 
-app.post("/users/login", async (req, res) => {
+// Login a user
+app.post('/users/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const user = await userQuery.getUserByEmail(email);
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid email or password' });
+        }
+
+        const isValidPassword = await bcrypt.compare(password, user.password);
+        if (!isValidPassword) {
+            return res.status(400).json({ error: 'Invalid email or password' });
+        }
+
+        const token = jwt.sign({ email: user.email, id: user._id }, process.env.JWT_SECRET, { expiresIn: '30m' });
+        res.status(200).json({ message: 'Success login!', token });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update user by ID
+app.put('/users/:id', authenticatePassportJwt(), (req, res) => {
+    const { id } = req.params;
+    const user = req.body;
+    userQuery.updateUser(id, user).then((updatedUser) => {
+        res.status(200).json(updatedUser);
+    }).catch(err => {
+        res.status(500).json({ error: err.message });
+    });
+});
+
+// Delete user by ID
+app.delete('/users/:id', authenticatePassportJwt(), (req, res) => {
+    const { id } = req.params;
+    userQuery.deleteUser(id).then(() => {
+        res.status(204).send();
+    }).catch(err => {
+        res.status(500).json({ error: err.message });
+    });
+});
+
+// Search users by name
+app.get('/users/search', authenticatePassportJwt(), (req, res) => {
+    const { name } = req.query;
+    if (!name) {
+        return res.status(400).json({ message: "Name query parameter is required" });
+    }
+    userQuery.findByName(name).then((users) => {
+        res.status(200).json(users);
+    }).catch(err => {
+        res.status(500).json({ error: err.message });
+    });
+});
+
+/**
+ * Company Routes
+ */
+
+// Get all companies
+app.get('/companies', authenticatePassportJwt(), (req, res) => {
+    companyQuery.getCompanies().then((companies) => {
+        res.status(200).json(companies);
+    }).catch(err => {
+        res.status(500).json({ error: err.message });
+    });
+});
+
+// Create a new company
+const passport = require('passport');
+app.use(initializePassport());
+app.use(passport.initialize());
+
+const multer = require('multer');
+const path = require('path');
+
+// Configure multer for file storage
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/'); // Adjust the destination folder
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + path.extname(file.originalname)); // Ensure unique filenames
+    }
+});
+
+const upload = multer({ storage: storage });
+
+// Define fields that can be uploaded
+const uploadFields = [
+    { name: 'company_logo', maxCount: 1 },
+    { name: 'npwp', maxCount: 1 },
+    { name: 'siup_nib', maxCount: 1 },
+    { name: 'nid_tdp', maxCount: 1 },
+    { name: 'president_id', maxCount: 1 },
+    { name: 'deed_of_incorporation', maxCount: 1 },
+    { name: 'approval_from_minister', maxCount: 1 },
+    { name: 'supporting_document', maxCount: 1 }
+];
+
+app.post('/companies', authenticatePassportJwt(), upload.fields(uploadFields), (req, res) => {
+  console.log('Received Payload:', req.body);
+  console.log('Files:', req.files);
+
   try {
-    const { email, password } = req.body;
-    const payload = { email, password };
-    const token = await login(payload);
-    res.status(200).json({ message: "Success login!", token });
+      const userId = req.user._id; // Ensure req.user is set by passport
+      const companyData = req.body;
+
+      const preparedData = {
+        user_id: userId,
+        ...companyData,
+        company_logo: req.files['company_logo'] ? req.files['company_logo'][0].path : null,
+        npwp: req.files['npwp'] ? req.files['npwp'][0].path : null,
+        siup_nib: req.files['siup_nib'] ? req.files['siup_nib'][0].path : null,
+        nid_tdp: req.files['nid_tdp'] ? req.files['nid_tdp'][0].path : null,
+        president_id: req.files['president_id'] ? req.files['president_id'][0].path : null,
+        deed_of_incorporation: req.files['deed_of_incorporation'] ? req.files['deed_of_incorporation'][0].path : null,
+        approval_from_minister: req.files['approval_from_minister'] ? req.files['approval_from_minister'][0].path : null,
+        supporting_document: req.files['supporting_document'] ? req.files['supporting_document'][0].path : null
+      };
+
+      // Create and save the company using companyQuery
+      const company = companyQuery.createCompany(preparedData);
+      res.status(201).json(company);
   } catch (err) {
-    res.status(500).json({ error: 'Internal Server Error', message: err.message });
+      res.status(500).json({ error: err.message });
   }
 });
 
-async function login(payload) {
-  try {
-    const checkUser = await userQuery.findOneByEmail(payload.email);
-    if (!checkUser) {
-      throw new Error('Invalid email or password');
-    }
-    const user = {
-      userId: checkUser.user_id,
-      email: checkUser.email,
-      password: checkUser.password
-    };
-    const isValidPassword = bcrypt.compareSync(payload.password, user.password);
-    if (!isValidPassword) {
-      throw new Error('Invalid email or password');
-    }
-    const key = process.env.JWT_SECRET || 'default_secret_key';
-    const token = jwt.sign(user, key, { expiresIn: '30m' });
-    return token;
-  } catch (error) {
-    console.error('Error login: ', error);
-    throw error;
-  }
-}
-
-// Route to GET all orders - returns the orders array as JSON
-app.get('/orders', verifyToken, (req, res) => {
-  userQuery.getOrders().then((orders) => {
-    res.json(orders);
-  });
+app.post('/test', upload.fields(uploadFields), (req, res) => {
+  console.log('Received Payload:', req.body);
+  console.log('Files:', req.files);
+  res.send('Received');
 });
 
-// Route to POST a new order - adds a new order to the orders array
-app.post('/orders', verifyToken, (req, res) => {
-  const order = req.body; // Extract the order from the request body
-  userQuery.createOrder(order).then((order) => {
-    res.status(201).json(order); // Respond with the created order and status code 201
-  });
+// Get company by user ID
+app.get('/companies/user/:userId', authenticatePassportJwt(), (req, res) => {
+    const { userId } = req.params;
+    companyQuery.getCompanyByUserId(userId).then((company) => {
+        if (!company) {
+            return res.status(404).json({ message: "Company not found" });
+        }
+        res.status(200).json(company);
+    }).catch(err => {
+        res.status(500).json({ error: err.message });
+    });
 });
 
-// Route to PUT (update) an order by id
-app.put('/orders/:id', (req, res) => {
-  const { id } = req.params; // Extract the id from the request parameters
-  const order = req.body; // Extract the updated order from the request body
-  userQuery.updateOrder(id, order).then((order) => {
-    res.status(200).json(order); // Respond with the updated order
-  });
+// Update company by ID
+app.put('/companies/:id', authenticatePassportJwt(), (req, res) => {
+    const { id } = req.params;
+    const company = req.body;
+    companyQuery.updateCompany(id, company).then((updatedCompany) => {
+        res.status(200).json(updatedCompany);
+    }).catch(err => {
+        res.status(500).json({ error: err.message });
+    });
 });
 
-// Route to DELETE an order by id
-app.delete('/orders/:id', authenticatePassportJwt(), (req, res) => {
-  const { id } = req.params; // Extract the id from the request parameters
-  userQuery.deleteOrder(id).then(() => {
-    res.status(204).send(); // Respond with no content and status code 204
-  });
+// Delete company by ID
+app.delete('/companies/:id', authenticatePassportJwt(), (req, res) => {
+    const { id } = req.params;
+    companyQuery.deleteCompany(id).then(() => {
+        res.status(204).send();
+    }).catch(err => {
+        res.status(500).json({ error: err.message });
+    });
 });
 
-// Route to search orders by status
-app.get('/orders/search', (req, res) => {
-  const { status } = req.query; // Extract the status query parameter
-
-  // Check if the status query parameter is provided
-  if (!status) {
-    return res.status(400).send({ message: "Status query parameter is required" });
-  }
-  userQuery.findByStatus(status).then((orders) => {
-    res.status(200).json(orders); // Respond with the filtered orders
-  });
+/**
+ * Error handling for 404 routes
+ */
+app.use((req, res) => {
+    res.status(404).json({ message: "Route not found" });
 });
 
-// Route to find an order by orderId
-app.get('/orders/:orderId', (req, res) => {
-  const { orderId } = req.params; // Extract the orderId from the request parameters
-  userQuery.findOneByOrderId(orderId).then((order) => {
-    res.status(200).json(order); // Respond with the found order
-  });
-});

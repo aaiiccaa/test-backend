@@ -3,69 +3,80 @@ const schema = require('./schema');
 const bcrypt = require('bcrypt');
 
 const Users = mongoose.model('User', schema.userSchema);
-const Orders = mongoose.model('Order', schema.orderSchema);
+const Companies = mongoose.model('Company', schema.companySchema);
 
+// Get all users
 async function getUsers() {
     return Users.find();
 }
 
-async function createUser(user) {
-    user.password = await bcrypt.hash(user.password, 10);
-    return Users.create(user);
+// Get user by email
+async function getUserByEmail(email) {
+    return Users.findOne({ email }).populate('company_id');
 }
 
-async function updateUser(id, user) {
-    return Users.findByIdAndUpdate(id, user, { new: true });
+// Create a new user
+async function createUser(userData) {
+    const hashedPassword = await bcrypt.hash(userData.password, 10);
+    userData.password = hashedPassword;
+    const newUser = new Users(userData);
+    return newUser.save();
 }
 
-async function deleteUser(id) {
-    return Users.findByIdAndDelete(id);
+// Update user by ID
+async function updateUser(userId, updateData) {
+    if (updateData.password) {
+        const hashedPassword = await bcrypt.hash(updateData.password, saltRounds);
+        updateData.password = hashedPassword;
+    }
+    return Users.findByIdAndUpdate(userId, updateData, { new: true });
 }
 
-async function findByName(name) {
-    return Users.find({ name: name });
+// Delete user by ID
+async function deleteUser(userId) {
+    return Users.findByIdAndDelete(userId);
 }
 
 async function findOneByEmail(email) {
-    return Users.findOne({ email: email });
+    return Users.findOne({ email });
 }
 
-async function getOrders() {
-    return Orders.find();
+// Get all companies
+async function getCompanies() {
+    return Companies.find();
 }
 
-async function createOrder(order) {
-    return Orders.create(order);
+// Get company by user ID
+async function getCompanyByUserId(userId) {
+    return Companies.findOne({ user_id: userId });
 }
 
-async function updateOrder(id, order) {
-    return Orders.findByIdAndUpdate(id, order, { new: true });
+// Create a new company
+async function createCompany(companyData) {
+    const newCompany = new Companies(companyData);
+    return newCompany.save();
 }
 
-async function deleteOrder(id) {
-    return Orders.findByIdAndDelete(id);
+// Update company by ID
+async function updateCompany(companyId, updateData) {
+    return Companies.findByIdAndUpdate(companyId, updateData, { new: true });
 }
 
-async function findByStatus(status) {
-    return Orders.find({ status: status });
+// Delete company by ID
+async function deleteCompany(companyId) {
+    return Companies.findByIdAndDelete(companyId);
 }
-
-async function findOneByOrderId(orderId) {
-    return Orders.findOne({ orderId: orderId });
-}
-
 
 module.exports = {
     getUsers,
+    getUserByEmail,
     createUser,
     updateUser,
     deleteUser,
-    findByName,
     findOneByEmail,
-    getOrders,
-    createOrder,
-    updateOrder,
-    deleteOrder,
-    findByStatus,
-    findOneByOrderId
-}
+    getCompanies,
+    getCompanyByUserId,
+    createCompany,
+    updateCompany,
+    deleteCompany
+};
