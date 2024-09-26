@@ -3,6 +3,7 @@ require('dotenv').config();
 const mongodb = require('./database/mongodb/db');
 const userQuery = require('./database/mongodb/query');
 const companyQuery = require('./database/mongodb/query'); 
+const cors = require('cors');
 
 mongodb.connectDB();
 
@@ -16,6 +17,8 @@ const app = express();
 const port = 3000;
 const host = process.env.NODE_ENV !== 'production' ? 'localhost' : '0.0.0.0'
 
+
+app.use(cors());
 app.use(initializePassport());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
